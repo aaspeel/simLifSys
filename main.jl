@@ -12,11 +12,7 @@ for each pair (i,j) of lifted systems (with i!=j), this script
 =#
 using Plots
 using DynamicPolynomials
-using LazySets
 using LaTeXStrings
-using JLD2
-using UnPack
-using Dates
 using Missings
 
 include("utils.jl")
@@ -27,9 +23,9 @@ include("refine.jl")
 Random.seed!(1234) # useful for sample_polytope() in utils.jl
 
 # create a time-stamped folder to store data.
-time_stamp = Dates.format(now(), "yyyy-mm-dd-HH-MM-SS")
-mkdir("saved_files/"*time_stamp)
-folder_name="saved_files/"*time_stamp*"/" 
+#time_stamp = Dates.format(now(), "yyyy-mm-dd-HH-MM-SS")
+#mkdir("saved_files")
+folder_name="saved_files/" 
 
 skip_BRS=false
 skip_plot=false
@@ -89,11 +85,6 @@ for (i,lifting) in enumerate(list_liftings)
     model_simulate[i]=model_simulate_loc
 end
 
-print("saving workspace... ")
-is_verified, status = nothing, nothing #to avoid a bug when saving workspace
-@save folder_name*"workspace_linearSystem.jld2" 
-println("Done")
-
 if !skip_BRS
     ##### COMPUTE BRS #####
     println("===============")
@@ -107,10 +98,6 @@ if !skip_BRS
         push!(list_BRS,implicit_presets)
         println("BRS computed for $i/$number_of_liftings lifted systems.")
     end
-
-    print("saving workspace... ")
-    @save folder_name*"workspace_BRS.jld2"
-    println("Done")
 end
 
 if !skip_plot
@@ -145,10 +132,6 @@ if !skip_plot
 
     display(fig)
     savefig(fig, folder_name*"brs.pdf" )
-
-    print("saving workspace... ")
-    @save folder_name*"workspace_plots.jld2"
-    println("Done")
 end
 
 if !skip_refinement
@@ -175,18 +158,17 @@ if !skip_refinement
                 println("TERMINATION_STATUS: ", status_loc)
 
                 status[i_good,i_bad] = status_loc
-                #models[i_good,i_bad] = model_loc
             end
         end
     end
-
-    println("[i,j] concerns LifSys_i ≤ LifSys_j")
-    println("termination status")
+    println()
+    println("===================")
+    println("===== RESULTS =====")
+    println("===================")
+    println("Results when trying to verify LifSys_i ≤ LifSys_j for i!=j.")
+    println("A refinement map has been found for LifSys_i ≤ LifSys_j iff termination_status[i,j]=='OPTIMAL::TerminationStatusCode = 1'.")
+    println("termination_status=")
     display(status)
-    println("optimization time")
-    display(duration)
-
-    print("saving workspace... ")
-    @save folder_name*"workspace_refine.jld2" #
-    println("Done")
+    #println("optimization time")
+    #display(duration)
 end

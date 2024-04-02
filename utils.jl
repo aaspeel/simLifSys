@@ -3,8 +3,6 @@ using Random
 using Plots
 using ConcaveHull
 
-using Plots
-
 # structure to represent a linear system of the form x(t+1) = A*x(t)+B*u(t) + W, where W is a polytope.
 struct LinearDynamics
     A
