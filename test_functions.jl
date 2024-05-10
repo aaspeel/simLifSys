@@ -1,5 +1,9 @@
-# this file contains test functions.
-
+#= this file contains functions to test indivudual functions from
+    utils.jl
+    simulate.jl
+    refine.jl
+    backward_reachability.jl
+=#
 using Plots
 using DynamicPolynomials
 using LazySets

@@ -5,7 +5,7 @@ This repository contains all the code necessary to implement the experiments in
 
 * Antoine Aspeel, Necmiye Ozay. [A Simulation Preorder for Koopman-like Lifted Control Systems](https://arxiv.org/abs/2401.14909). Presentation in _The 8th IFAC Conference on Analysis and Design of Hybrid Systems_, 2024.
 
-**A Gurobi license is needed to run the code.** Free Gurobi licenses are available for academics. More information [here](https://www.gurobi.com/academia/academic-program-and-licenses/).
+The code uses Julia-1.10 and requires a Mosek license. Free Mosek licenses are available for academics. More information [here](https://www.mosek.com/).
 
 In the folder « simLifSys-main », use the Julia REPL to activate the environment by running:
 
@@ -21,18 +21,3 @@ Other files:
 * backward_reachability.jl contains functions related to presets computation.
 * utils.jl contains plot-related functions, and a structure to represent affine systems.
 * test_functions.jl contains functions to test every function separetely.
-
-The code uses Julia-1.8 with the following dependencies:
-* CSDP
-* ConcaveHull
-* DynamicPolynomials
-* Gurobi
-* JuMP
-* LaTeXStrings
-* LazySets
-* LinearAlgebra
-* Missings
-* Plots
-* Polyhedra
-* Random
-* SumOfSquares

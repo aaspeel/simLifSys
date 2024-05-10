@@ -28,13 +28,14 @@ function hyperbox(radius)
     return hrep(halfSpaces)
 end
     
-"""
-sample_polytope (not sure that is a uniform distribution over the polytope)
-Description:
-    This function samples a polytope as specified by polytope_in. If 'fromVertices', return one vertex.
-"""
+
 function sample_polytope( v_polytope_in::VRepresentation, fromVertices::Bool=false )
-    # sample the interior of a polytope if fromVertices is false; sample vertices of the polytope if fromVertices=true.
+    #=
+    sample_polytope (note that the distribution is not uniform)
+    
+    This function samples a polytope as specified by polytope_in. If 'fromVertices', return one vertex.
+    Sample the interior of a polytope if fromVertices is false; sample vertices of the polytope if fromVertices=true.
+    =#
 
     # To have field .V in v_polytope_in
     v_polytope_in=convert(MixedMatVRep{Float64,Array{Float64,2}},v_polytope_in)
@@ -55,6 +56,7 @@ function sample_polytope( v_polytope_in::VRepresentation, fromVertices::Bool=fal
 end
 
 function grid_polytope(pol::HRepresentation, n_steps=10)
+    # returns samples from a grid a polytope. The polytope must be a 2D axis align box.
     @assert pol.A == [1 0; -1 0; 0 1; 0 -1] # must be hyperbox in canonical form
     h = pol.b
     x=range(-h[2],h[1],n_steps)
@@ -67,6 +69,7 @@ end
 
 function plot_implicit_representation!(current_plot, x, domain_x, lifted_set, lifting, n_samples=1000; kwargs...)
     # plot of an implicit representation: { x\in domain_x | lifting(x)\in lifted_set }. Use sample rejection (with n_samples).
+    # kwargs arguments are passed to the plot function.
 
     if domain_x.A == [1 0; -1 0; 0 1; 0 -1] # must be hyperbox in canonical form
         samples_x = grid_polytope(domain_x, ceil(Int64,sqrt(n_samples)))
@@ -87,6 +90,7 @@ end
 
 function plot_implicit_representation_hull!(current_plot, x, domain_x, lifted_set, lifting, n_samples=1000, knn_param=50; kwargs...)
     # plot the concave hull of the implicit representation.
+    # kwargs arguments are passed to the plot function.
 
     if domain_x.A == [1 0; -1 0; 0 1; 0 -1] # must be hyperbox in canonical form
         samples_x = grid_polytope(domain_x, ceil(Int64,sqrt(n_samples)))
@@ -111,7 +115,7 @@ function plot_implicit_representations_hull!(current_plot, x, domain_x, lifted_s
         if domain_x.A == [1 0; -1 0; 0 1; 0 -1] # must be hyperbox in canonical form
             samples_x = grid_polytope(domain_x, ceil(Int64,sqrt(n_samples)))
         else
-            println("CAUTION: random sampling was used (instead of grid sampling) for plot_implicit_representations_hull!() because domain_x was not a 2D hyperbod in canonical form")
+            println("CAUTION: random sampling was used (instead of grid sampling) for plot_implicit_representations_hull!() because domain_x was not a 2D hyperbox in canonical form")
             samples_x = [sample_polytope(vrep(polyhedron(domain_x))) for i=1:n_samples]
         end
     end
@@ -121,11 +125,15 @@ function plot_implicit_representations_hull!(current_plot, x, domain_x, lifted_s
 
     n_sets = length(lifted_sets)
 
-    # find the indices of the samples that are in at least one lisfted set.
-    ind=BitArray(zeros(n_samples)) # list of indices if z that are contained in one of the lifted sets
+    # find the indices of the samples that are in at least one lifted set.
+    ind = BitArray(zeros(n_samples)) # list of indices if z that are contained in one of the lifted sets
     for i=1:n_sets
-        new_ind = in.(samples_z,lifted_sets[i])
-        ind = any( [ind new_ind], dims=2)
+        try
+            new_ind = in.(samples_z,lifted_sets[i])
+            ind = any( [ind new_ind], dims=2)
+        catch e
+            @warn "The following error has been catched: $e"
+        end
     end
     ind=ind[:,1] # to get a vector instead of a matrix
 

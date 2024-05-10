@@ -1,25 +1,46 @@
+# Functions used for backward reachability.
+
 using DynamicPolynomials
 using Gurobi
 using LazySets
 using Polyhedra
 
 function compute_preset(linearSystem, safe_set, input_set, target_set)
-    # compute the one-step preset.
-
-    solver = Gurobi.Optimizer
-    if isempty(target_set, solver)
-        return target_set
-    end
+    # compute the one-step preset. That is, the set of x in safe_set such that it exists a u in input_set that steers x in target_Set.
 
     (n_x,n_u)=size(linearSystem.B)
 
-    # compute the Minkowski difference 'target-W' using LazySets
-    target_lazy = LazySets.HPolytope(target_set)
+    # create an empty polytope. Is returned if something goes wrong. 1*x[1]≤-1 && -1*x[1]≤-1
+    H_empty = zeros(2,n_x); H_empty[:,1] = [1;-1];
+    an_empty_polytope = hrep(H_empty,[-1.0;-1.0])
+
+    solver = Gurobi.Optimizer
+
+    try
+        if isempty(target_set, solver)
+            return an_empty_polytope
+        end
+    catch e
+        @warn "Preset considered empty because the following error has been catched: $e"
+        return an_empty_polytope
+    end
+
+    # compute the Minkowski difference 'target-W' using LazySets. Requires a conversion.
+    try
+        global target_lazy = LazySets.HPolytope(target_set) # global keyword is used to make the variable accessible out of the try-catch.
+    catch e
+        @warn "Preset considered empty because the following error has been catched: $e"
+        return an_empty_polytope
+    end
+
     W_lazy = LazySets.HPolytope(linearSystem.W)
     target_minus_W_lazy = LazySets.minkowski_difference(target_lazy,W_lazy)
     target_minus_W = Polyhedra.polyhedron(target_minus_W_lazy)
 
     # compute the polyhedron {(x,u) | Ax+Bu is in target minus W}
+    if size(hrep(target_minus_W).A)==(0,0)
+        return target_set
+    end
     H_unconstrained_preset_xu = hrep(target_minus_W).A*[linearSystem.A linearSystem.B]
     h_unconstrained_preset_xu = hrep(target_minus_W).b
     unconstrained_preset_xu = hrep(H_unconstrained_preset_xu,h_unconstrained_preset_xu)
@@ -66,7 +87,7 @@ function compute_implicit_presets(linearSystem, safe_set_x, input_set, target_se
 end
 
 function forward_image(linearSystem, x_variable, lifting, input_set, x0)
-
+    # Return A*lifting(x_0) ⨁ B*input_set ⨁ W, where linearSystem represents Az+Bu ⨁ W
     input_set_vrep = vrep(polyhedron(input_set))
     W_vrep = vrep(polyhedron(linearSystem.W))
 

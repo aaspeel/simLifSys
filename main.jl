@@ -20,20 +20,20 @@ include("simulate.jl")
 include("backward_reachability.jl")
 include("refine.jl")
 
-Random.seed!(1234) # useful for sample_polytope() in utils.jl
+Random.seed!(1234) # for reproducibility.
 
-# create a time-stamped folder to store data.
-#time_stamp = Dates.format(now(), "yyyy-mm-dd-HH-MM-SS")
-#mkdir("saved_files")
 folder_name="saved_files/" 
 
 skip_BRS=false
 skip_plot=false
+skip_pre_feasibility=false
 skip_refinement=false
 
-println("======================")
-println("= PROBLEM DEFINITION =")
-println("======================")
+println("""
+    ======================
+    = PROBLEM DEFINITION =
+    ======================
+    """)
 
 n_x=2
 n_u=1
@@ -45,7 +45,7 @@ f = x + dt*[x[2] ; 2*x[1]-2*x[1]^3-0.5*x[2]+u[1]] # Duffing equation
 
 # H-rep of the safety set
 H_Sx = [1 0; -1 0; 0 1; 0 -1]
-h_Sx = [2; 2; 3; 3] # [2; 2; 3; 3]
+h_Sx = [2; 2; 2; 2] #[2; 2; 3; 3]
 Sx = hrep(H_Sx,h_Sx)
 
 # H-rep of the input set
@@ -53,43 +53,71 @@ H_Su = [1; -1;;] # must be a matrix
 h_Su = [50; 50]
 Su = hrep(H_Su,h_Su)
 
-target_set = hrep( Polyhedra.polyhedron(BallInf(zeros(2), 0.5)) )
+target_set = hrep( Polyhedra.polyhedron(BallInf(zeros(2), 1.0)) )
 
-lifting_1 = [x;] 
-lifting_2 = [x; x[1]^3]
-lifting_3 = [x; x[1]*x[2]]
+lifting_1 = [x;]
+lifting_2 = [x;]
+lifting_3 = [x; x[1]^2]
+lifting_4 = [x; x[1]^2]
+lifting_5 = [x; x[1]^2; x[1]^3]
+lifting_6 = [x; x[1]^2; x[1]^3]
+# The dynamics associated with even liftings (that is lifting_2, lifting_4, lifting 6) will be artificially increased. That is why each lifting is considered twice.
 
-list_liftings = [lifting_1, lifting_2, lifting_3] # list_liftings[i] = lifting_i
+# list of feasible liftings:
+# [x;]
+# [x; x[1]^2]
+# [x; x[1]^3]
+# [x; x[1]^2*x[2]]
+# [x; x[1]^4]
+
+list_liftings = [lifting_1, lifting_2, lifting_3, lifting_4, lifting_5, lifting_6]
 
 cone_type_simulation = "sos"
-maxdegree_certificate_simulation = 10
-cone_type_refinement = "sdsos"
-maxdegree_certificate_refinement = 10
+maxdegree_certificate_simulation = 10 #10
+cone_type_refinement = "sdsos" # sdsos # note that sampling is used instead.
+maxdegree_certificate_refinement = 10 # 10
 
-n_presets = 10
+n_presets = 10 # number of presets in the computation of backward reachable sets.
 
 number_of_liftings = length(list_liftings)
 
 ###### Compute linear dynamics for each lifting function #####
-println("===================")
-println("== LINEAR SYSTEM ==")
-println("===================")
+println("""
+    ===================
+    == LINEAR SYSTEM ==
+    ===================
+    """)
 
 list_linear_systems=[]
 println("Compute $number_of_liftings affine lifted systems...")
 model_simulate = missings(Any, number_of_liftings)
+
 for (i,lifting) in enumerate(list_liftings)
+    println("Compute linear system for lifting i=$i.")
     linear_system, model_simulate_loc = koopman_over_approx(x, u, f, lifting, Sx, Su, maxdegree_certificate = maxdegree_certificate_simulation, cone_type = cone_type_simulation)
+    
+    # Hack: Increase the noise for even liftings. !
+    if iseven(i)
+        println("Hacking i == $i")
+        println("linear_system.W.b before hack:", linear_system.W.b)
+        linear_system.W.b = linear_system.W.b .+10
+        println("linear_system.W.b after hack:", linear_system.W.b)
+    end
+
     push!(list_linear_systems,linear_system)
     println("$i/$number_of_liftings affine lifted systems computed.")
     model_simulate[i]=model_simulate_loc
+    println("linear_system.A_xbar:\n "); display(linear_system.A)
 end
+return
 
 if !skip_BRS
     ##### COMPUTE BRS #####
-    println("===============")
-    println("===== BRS =====")
-    println("===============")
+    println("""
+        ===============
+        ===== BRS =====
+        ===============
+        """)
 
     list_BRS=[]
     println("Compute $number_of_liftings BRS (each with $n_presets steps)...")
@@ -102,9 +130,11 @@ end
 
 if !skip_plot
     ##### PLOT BRS #####
-    println("=================")
-    println("===== PLOTS =====")
-    println("=================")
+    println("""
+        =================
+        ===== PLOTS =====
+        =================
+        """)
 
     n_samples=2*1e3
 
@@ -119,8 +149,8 @@ if !skip_plot
         samples_x = [sample_polytope(vrep(polyhedron(domain_x))) for i=1:n_samples]
     end
 
-    list_colors = [:blue; :red; :green; :purple; :orange; :pink; :brown; :black; :grey23]
-    list_linestyles = [:solid; :dash; :dot; :dashdot; :dashdotdot; :auto; :auto; :auto]
+    list_colors = [:black; :pink; :blue; :orange; :red; :green; :purple; :brown; :grey23; :auto]
+    list_linestyles = [:solid; :dashdotdot; :dash; :dot; :dashdot; :auto; :auto; :auto; :auto; :auto]
     println("Plot $number_of_liftings implicit plots (each with $n_presets steps)...")
     for (i,lifting) in enumerate(list_liftings)
         plot_implicit_representations_hull!(fig, x, Sx, list_BRS[i], lifting, samples_x, n_samples, 50; color=list_colors[i], linestyle=list_linestyles[i], label=L"BRS_%$i")
@@ -134,26 +164,54 @@ if !skip_plot
     savefig(fig, folder_name*"brs.pdf" )
 end
 
+if !skip_pre_feasibility
+    println("""
+            ==================
+            ==== PRE-FEAS ====
+            ==================
+            """)
+    pre_feasibility = missings(Any, number_of_liftings, number_of_liftings)
+    for (i_good,linear_system_good) in enumerate(list_linear_systems)
+        A_good = linear_system_good.A
+        for (i_bad,linear_system_bad) in enumerate(list_linear_systems)
+            A_bad = linear_system_bad.A
+            pre_feasibility[i_good,i_bad] = dynamics_feasibility_zbar(A_bad, A_good, n_x)
+        end
+    end
+    println()
+    println("""
+            Pre-feasibility for LifSys_i ≤ LifSys_j.
+            Condition for LifSys_i ≤ LifSys_j was pre-feasible iff pre_feasibility[i,j] is true.
+            """)
+        println("pre_feasibility=")
+        display(pre_feasibility)
+end
+
 if !skip_refinement
     ##### TRY TO REFINE #####
-    println("==================")
-    println("===== REFINE =====")
-    println("==================")
+    println("""
+        ==================
+        ===== REFINE =====
+        ==================
+        """)
 
     #models = missings(Any, number_of_liftings, number_of_liftings)
     status = missings(Any, number_of_liftings, number_of_liftings)
     duration = missings(Any, number_of_liftings, number_of_liftings)
+    model = missings(Any, number_of_liftings, number_of_liftings)
     for (i_good,lifting_good) in enumerate(list_liftings)
         linear_system_good = list_linear_systems[i_good]
         for (i_bad,lifting_bad) in enumerate(list_liftings) # try to verify LifSys_good ≤ LifSys_bad
-            if i_good != i_bad
+            if i_good != i_bad && pre_feasibility[i_good,i_bad]
                 linear_system_bad = list_linear_systems[i_bad]
                 println("Try to prove LifSys_$i_good ≤ LifSys_$i_bad ...")
 
                 model_loc = compute_refinement(x, Sx, Su, lifting_bad, linear_system_bad, lifting_good, linear_system_good, maxdegree_certificate=maxdegree_certificate_refinement, cone_type=cone_type_refinement)
-                set_time_limit_sec(model_loc, 60.0)
-                duration[i_good,i_bad] = @elapsed optimize!(model_loc)
+                set_time_limit_sec(model_loc, 10*60)
+                set_attribute(model_loc, "FeasibilityTol", 1e-6)
 
+                duration[i_good,i_bad] = @elapsed optimize!(model_loc)
+                model[i_good,i_bad] = model_loc
                 status_loc = termination_status(model_loc)
                 println("TERMINATION_STATUS: ", status_loc)
 
@@ -162,13 +220,13 @@ if !skip_refinement
         end
     end
     println()
-    println("===================")
-    println("===== RESULTS =====")
-    println("===================")
-    println("Results when trying to verify LifSys_i ≤ LifSys_j for i!=j.")
-    println("A refinement map has been found for LifSys_i ≤ LifSys_j iff termination_status[i,j]=='OPTIMAL::TerminationStatusCode = 1'.")
+    println("""
+        ===================
+        ===== RESULTS =====
+        ===================
+        Results when trying to verify LifSys_i ≤ LifSys_j for i!=j.
+        A refinement map has been found for LifSys_i ≤ LifSys_j iff termination_status[i,j]=='OPTIMAL::TerminationStatusCode = 1'.
+        """)
     println("termination_status=")
     display(status)
-    #println("optimization time")
-    #display(duration)
 end

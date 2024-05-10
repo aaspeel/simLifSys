@@ -6,10 +6,13 @@ using JuMP
 using SumOfSquares
 using CSDP
 using Gurobi
+using Mosek
+using MosekTools
 
 include("utils.jl")
 
 function koopman_over_approx(x, u, f, lifting, domain_X::HRepresentation, domain_U::HRepresentation; template_W=nothing, maxdegree_certificate=nothing, cone_type = "sos")
+    # Compute an affine lifted system using sum-of-squares
 
     n_lifting = length(lifting)
     n_u = fulldim(domain_U)
@@ -24,7 +27,7 @@ function koopman_over_approx(x, u, f, lifting, domain_X::HRepresentation, domain
         model = Model(Gurobi.Optimizer)
     elseif cone_type=="sos"
         cone=SOSCone()
-        model = Model(CSDP.Optimizer)
+        model = Model(Mosek.Optimizer)
     else
         error("Invalid cone.")
     end
@@ -34,6 +37,7 @@ function koopman_over_approx(x, u, f, lifting, domain_X::HRepresentation, domain
 
     Err = lifting_of_f - A*lifting - B*u
 
+    # Define the polytope W := {w | template_W*w <= h_W }
     # By default, template_W is an axis-aligned hyperbox
     if template_W === nothing
         # Construct the H matrix of the H-rep of an hypercube, e.g., if n_lifting=2:  H_W = [1 0;-1 0; 0 1; 0 -1]
@@ -49,8 +53,8 @@ function koopman_over_approx(x, u, f, lifting, domain_X::HRepresentation, domain
     h_Sx=domain_X.b
     H_Su=domain_U.A
     h_Su=domain_U.b
-    S = intersect([@set (H_Sx*x)[i]<=h_Sx[i]; for i in eachindex(h_Sx)] ...)
-    S = intersect(S, [@set (H_Su*u)[i]<=h_Su[i]; for i in eachindex(h_Su)] ...)
+    S = intersect([@set (H_Sx*x)[i]<=h_Sx[i] for i in eachindex(h_Sx)] ...)
+    S = intersect(S, [@set (H_Su*u)[i]<=h_Su[i] for i in eachindex(h_Su)] ...)
 
     # The error Err must be in W: H_W * Err <= h_W
     if maxdegree_certificate === nothing
@@ -63,10 +67,20 @@ function koopman_over_approx(x, u, f, lifting, domain_X::HRepresentation, domain
     @objective(model, Min, sum(h_W))
 
     optimize!(model)
+    println(solution_summary(model))
+    println("""
+            termination_status : $(termination_status(model))
+            primal_status      : $(primal_status(model))
+            dual_status        : $(dual_status(model))
+            raw_status         : $(raw_status(model))
+            """)
 
-    solution_summary(model)
-
+    if (primal_status(model) != FEASIBLE_POINT) || (dual_status(model) != FEASIBLE_POINT)
+        error("Model is not feasible")
+    end
     linear_system = LinearDynamics(value.(A), value.(B), hrep(template_W,value.(h_W)))
 
-    return linear_system,model
+    println("linear_system:\n",linear_system)
+
+    return linear_system, model
 end
